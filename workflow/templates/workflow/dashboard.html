@@ -1,0 +1,205 @@
+{% extends 'workflow/base.html' %}
+
+{% block content %}
+<h2 class="mb-4">Dashboard</h2>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title">Open Cases</h5>
+                <h2 class="card-text">{{ open_cases }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title">In Progress</h5>
+                <h2 class="card-text">{{ in_progress_cases }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">Closed Cases</h5>
+                <h2 class="card-text">{{ closed_cases }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title">Upcoming Callbacks</h5>
+                <h2 class="card-text">{{ upcoming_callbacks }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Recent Cases</h5>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newCaseModal">
+                    <i class="fas fa-plus"></i> New Case
+                </button>
+            </div>
+            <div class="card-body">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Case ID</th>
+                            <th>Client Name</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Assigned To</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="casesTableBody">
+                        <!-- Cases will be loaded here via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Case Modal -->
+<div class="modal fade" id="newCaseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">New Case</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newCaseForm">
+                    <div class="mb-3">
+                        <label class="form-label">Client Name</label>
+                        <input type="text" class="form-control" name="client_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="3" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Priority</label>
+                        <select class="form-control" name="priority">
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM">Medium</option>
+                            <option value="HIGH">High</option>
+                            <option value="URGENT">Urgent</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="submitNewCase">Create Case</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Function to load cases
+    function loadCases() {
+        fetch('/api/cases/')
+            .then(response => response.json())
+            .then(data => {
+                const tableBody = document.getElementById('casesTableBody');
+                tableBody.innerHTML = '';
+                
+                data.forEach(case_ => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><a href="/case/${case_.case_id}/">${case_.case_id}</a></td>
+                        <td>${case_.client_name}</td>
+                        <td><span class="badge bg-${getStatusColor(case_.status)}">${case_.status}</span></td>
+                        <td><span class="badge bg-${getPriorityColor(case_.priority)}">${case_.priority}</span></td>
+                        <td>${case_.assigned_agent ? case_.assigned_agent.user.username : 'Unassigned'}</td>
+                        <td>${new Date(case_.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" onclick="viewCase('${case_.case_id}')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            });
+    }
+
+    // Helper functions for badge colors
+    function getStatusColor(status) {
+        const colors = {
+            'OPEN': 'primary',
+            'IN_PROGRESS': 'warning',
+            'CLOSED': 'success'
+        };
+        return colors[status] || 'secondary';
+    }
+
+    function getPriorityColor(priority) {
+        const colors = {
+            'LOW': 'success',
+            'MEDIUM': 'warning',
+            'HIGH': 'danger',
+            'URGENT': 'dark'
+        };
+        return colors[priority] || 'secondary';
+    }
+
+    // Function to view a case
+    function viewCase(caseId) {
+        window.location.href = `/case/${caseId}/`;
+    }
+
+    // Handle new case submission
+    document.getElementById('submitNewCase').addEventListener('click', function() {
+        const form = document.getElementById('newCaseForm');
+        const formData = new FormData(form);
+        
+        fetch('/api/cases/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(Object.fromEntries(formData))
+        })
+        .then(response => response.json())
+        .then(data => {
+            $('#newCaseModal').modal('hide');
+            loadCases();
+            form.reset();
+        });
+    });
+
+    // Function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Load cases when page loads
+    document.addEventListener('DOMContentLoaded', loadCases);
+</script>
+{% endblock %}
